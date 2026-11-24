@@ -11,6 +11,23 @@ Ball-drop is an [Agent Skills](https://agentskills.io) package. It teaches any c
 | **Skill name** | `balldrop` |
 | **Install** | `npx skills add breannasalah2/Ball-drop --skill balldrop` |
 
+## Swipe (browser)
+
+Talk, then swipe to send continuity commands from a phone PWA or Chrome side panel.
+
+- **Live PWA:** [https://khyejqvutrjwxljuhmot.supabase.co/functions/v1/swipe-app/](https://khyejqvutrjwxljuhmot.supabase.co/functions/v1/swipe-app/)
+- **Chrome extension:** load unpacked from [`extension/`](extension/) — see [`extension/README.md`](extension/README.md)
+- **PWA source:** [`swipe/`](swipe/) (assets + [`swipe/schema.sql`](swipe/schema.sql))
+
+**Swipe map**
+
+| | |
+| --- | --- |
+| ↑ | approve |
+| ↓ | drop |
+| → | next |
+| ← | undo |
+
 ## Why it exists
 
 Long-running agent work fails most often at the edges: a session ends mid-task, a second agent starts cold, or a save is claimed but never verified. Ball-drop turns continuity into a small, repeatable protocol with fixed records and templates — not a vague “remember what we did.”
@@ -55,6 +72,8 @@ Ball-drop/
 ├── AGENTS.md
 ├── CONTRIBUTING.md
 ├── LICENSE
+├── extension/          # Chrome MV3 side-panel (Ball-drop Swipe)
+├── swipe/              # PWA source + schema.sql
 ├── skills/balldrop/
 │   ├── SKILL.md
 │   └── references/
