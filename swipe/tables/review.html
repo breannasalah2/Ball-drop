@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#E10600">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Swipe">
+  <meta name="description" content="Talk and swipe to send commands: approve, drop, next, or undo.">
+  <title>Swipe Commands</title>
+  <style>
+    :root {
+      --red: #E10600;
+      --red-dim: rgba(225, 6, 0, 0.18);
+      --red-glow: rgba(225, 6, 0, 0.55);
+      --bg: #0a0a0a;
+      --bg-elev: #161616;
+      --bg-log: #111111;
+      --text: #f5f5f5;
+      --muted: #8a8a8a;
+      --line: #2a2a2a;
+      --safe-t: env(safe-area-inset-top, 0px);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-l: env(safe-area-inset-left, 0px);
+      --safe-r: env(safe-area-inset-right, 0px);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      padding-top: var(--safe-t);
+      padding-bottom: var(--safe-b);
+      padding-left: var(--safe-l);
+      padding-right: var(--safe-r);
+      height: 100%;
+      height: 100dvh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px 6px;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      color: var(--red);
+      text-transform: uppercase;
+    }
+
+    .brand p {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    .tablink {
+      font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px;
+      color: #c9c9c9; text-decoration: none; white-space: nowrap;
+    }
+    #review .signin { color: #f3b4b1; }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .storage-pill {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 8px;
+      max-width: 110px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .storage-pill.online { color: #f3b4b1; border-color: rgba(225, 6, 0, 0.45); }
+    .storage-pill.error { color: #ffb4b4; border-color: var(--red); }
+
+    #mic-btn {
+      width: 48px;
+      height: 48px;
+      border: 0;
+      border-radius: 50%;
+      background: #1c1c1c;
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      position: relative;
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    #mic-btn.live {
+      background: var(--red);
+      box-shadow: 0 0 0 0 rgba(225, 6, 0, 0.5), 0 0 18px var(--red-glow);
+      animation: pulse 1.6s ease-out infinite;
+    }
+
+    #mic-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(225, 6, 0, 0.55), 0 0 18px var(--red-glow); }
+      70% { box-shadow: 0 0 0 14px rgba(225, 6, 0, 0), 0 0 18px var(--red-glow); }
+      100% { box-shadow: 0 0 0 0 rgba(225, 6, 0, 0), 0 0 18px var(--red-glow); }
+    }
+
+    #transcript {
+      margin: 4px 16px 8px;
+      min-height: 52px;
+      max-height: 88px;
+      overflow: auto;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 15px;
+      line-height: 1.35;
+      flex-shrink: 0;
+    }
+
+    #transcript .placeholder { color: var(--muted); }
+    #transcript .interim { color: #c9c9c9; font-style: italic; }
+    #transcript .final { color: var(--text); }
+
+    #review {
+      margin: 0 12px 8px;
+      padding: 12px;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    #review h2 {
+      font-size: 18px;
+      line-height: 1.3;
+    }
+
+    #review-meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    #review-details {
+      margin-top: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+
+    #pad {
+      position: relative;
+      flex: 1;
+      margin: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background:
+        radial-gradient(ellipse at center, rgba(225, 6, 0, 0.10), transparent 62%),
+        var(--bg-elev);
+      touch-action: none;
+      overflow: hidden;
+      min-height: 180px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .hint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      text-align: center;
+      gap: 8px;
+      padding: 48px 24px;
+    }
+
+    .hint .title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #d0d0d0;
+    }
+
+    .hint .keys {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      line-height: 1.5;
+    }
+
+    .edge {
+      position: absolute;
+      color: var(--red);
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      font-size: 11px;
+      opacity: 0.7;
+      pointer-events: none;
+      text-transform: uppercase;
+    }
+
+    .edge .arrow { display: block; font-size: 22px; letter-spacing: 0; line-height: 1; text-align: center; }
+    .edge.up { top: 14px; left: 0; right: 0; text-align: center; }
+    .edge.down { bottom: 14px; left: 0; right: 0; text-align: center; }
+    .edge.left { left: 12px; top: 50%; transform: translateY(-50%); text-align: center; }
+    .edge.right { right: 12px; top: 50%; transform: translateY(-50%); text-align: center; }
+
+    #confirm {
+      min-height: 28px;
+      margin: 8px 16px 4px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      flex-shrink: 0;
+      letter-spacing: 0.01em;
+    }
+
+    #confirm:empty::before {
+      content: "Swipe or use arrow keys.";
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 13px;
+    }
+
+    #log-wrap {
+      flex: 0 0 28%;
+      min-height: 110px;
+      max-height: 34%;
+      margin: 0 12px 8px;
+      background: var(--bg-log);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #log-wrap h2 {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 12px 6px;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+
+    #log {
+      overflow: auto;
+      flex: 1;
+      padding: 4px 0;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .log-empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 16px 12px;
+    }
+
+    .log-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid #1c1c1c;
+    }
+
+    .log-item:first-child { background: var(--red-dim); }
+
+    .log-meta {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .log-dir {
+      color: var(--red);
+      font-weight: 700;
+      min-width: 3.2em;
+    }
+
+    .log-cmd { color: var(--text); font-weight: 600; }
+    .log-time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .log-text { margin-top: 2px; font-size: 12px; color: #b5b5b5; }
+
+    #flash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 10, 0.28);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 40;
+      transition: opacity 0.12s ease;
+    }
+
+    #flash.show { opacity: 1; }
+
+    #flash .flash-arrow {
+      font-size: clamp(72px, 26vw, 180px);
+      line-height: 0.9;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 0 40px var(--red-glow), 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    #flash .flash-label {
+      margin-top: 6px;
+      font-size: clamp(28px, 11vw, 64px);
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      color: var(--red);
+      text-shadow: 0 0 24px var(--red-glow);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="brand">
+        <h1>Swipe</h1>
+        <p id="review-count">Loading tasks for review</p>
+      </div>
+      <div class="header-actions">
+        <a class="tablink" href="./">Tables</a>
+        <span id="storage-pill" class="storage-pill">Local</span>
+        <button id="mic-btn" type="button" aria-pressed="false" aria-label="Start microphone">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V7a3.5 3.5 0 1 0-7 0v4.5A3.5 3.5 0 0 0 12 15Z" fill="currentColor"/>
+            <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M12 17v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <section id="review" aria-live="polite">
+      <h2 id="review-name">Loading the task list…</h2>
+      <p id="review-meta"></p>
+      <p id="review-details"></p>
+    </section>
+
+    <div id="transcript" aria-live="polite">
+      <span class="placeholder">Tap the mic, then talk. Your words will appear here.</span>
+    </div>
+
+    <div id="pad" aria-label="Swipe command pad">
+      <div class="edge up"><span class="arrow">↑</span>Approve</div>
+      <div class="edge down"><span class="arrow">↓</span>Drop</div>
+      <div class="edge left"><span class="arrow">←</span>Undo</div>
+      <div class="edge right"><span class="arrow">→</span>Next</div>
+      <div class="hint">
+        <div class="title">Swipe any direction</div>
+        <div class="keys">↑ approve &nbsp; ↓ drop<br>→ next &nbsp; ← undo<br>Arrow keys work on desktop</div>
+      </div>
+    </div>
+
+    <div id="confirm" aria-live="assertive"></div>
+
+    <section id="log-wrap">
+      <h2>Command log</h2>
+      <div id="log"><div class="log-empty">No commands yet.</div></div>
+    </section>
+  </div>
+
+  <div id="flash" aria-hidden="true">
+    <div class="flash-arrow" id="flash-arrow">↑</div>
+    <div class="flash-label" id="flash-label">APPROVE</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script>
+    /* Reads and writes the DallaVia database as you (signed in on the Tables page).
+       The project URL and public key come from the swipe-tables function. */
+    const FUNCTION_BASE = "https://lqxaiaiewdseplbuxddz.supabase.co/functions/v1/swipe-tables/";
+    (function () {
+      "use strict";
+
+      const COMMANDS = {
+        up:    { command: "Approve / do it",      flash: "APPROVE", arrow: "↑" },
+        down:  { command: "Drop (thumbs down)",   flash: "DROP",    arrow: "↓" },
+        right: { command: "Next / skip",          flash: "NEXT",    arrow: "→" },
+        left:  { command: "Undo / go back",       flash: "UNDO",    arrow: "←" }
+      };
+
+      const STORAGE_KEY = "swipe_commands";
+      const SWIPE_MIN = 56;
+      const COOLDOWN_MS = 420;
+      const FLASH_MS = 700;
+
+      const el = {
+        pad: document.getElementById("pad"),
+        mic: document.getElementById("mic-btn"),
+        transcript: document.getElementById("transcript"),
+        confirm: document.getElementById("confirm"),
+        reviewName: document.getElementById("review-name"),
+        reviewMeta: document.getElementById("review-meta"),
+        reviewDetails: document.getElementById("review-details"),
+        reviewCount: document.getElementById("review-count"),
+        log: document.getElementById("log"),
+        flash: document.getElementById("flash"),
+        flashArrow: document.getElementById("flash-arrow"),
+        flashLabel: document.getElementById("flash-label"),
+        pill: document.getElementById("storage-pill")
+      };
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      let supabaseClient = null;
+      let signedIn = false;
+
+      let entries = [];
+      let queue = [];
+      let queueIndex = 0;
+      const undoStack = [];
+      let listening = false;
+      let recognition = null;
+      let restartTimer = null;
+      let committed = "";
+      let interim = "";
+      let lastFireAt = 0;
+      let flashTimer = null;
+
+      const pointer = {
+        active: false,
+        id: null,
+        x: 0,
+        y: 0
+      };
+
+      function setPill(text, state) {
+        el.pill.textContent = text;
+        el.pill.classList.remove("online", "error");
+        if (state) el.pill.classList.add(state);
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function formatTime(iso) {
+        try {
+          return new Date(iso).toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+            second: "2-digit"
+          });
+        } catch (err) {
+          return "";
+        }
+      }
+
+      function itemLabel(transcript) {
+        const text = (transcript || "").trim();
+        return text || "that item";
+      }
+
+      function confirmationFor(direction, transcript) {
+        const item = itemLabel(transcript);
+        if (direction === "down") return "Done: " + item + " removed";
+        if (direction === "up") return "Done: approved " + item;
+        if (direction === "right") return "Done: skipped " + item;
+        return "Done: undid " + item;
+      }
+
+      function currentTranscript() {
+        return [committed, interim].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+      }
+
+      function renderTranscript() {
+        const finalText = committed.trim();
+        const interimText = interim.trim();
+        if (!finalText && !interimText) {
+          const msg = listening
+            ? "Listening…"
+            : (SpeechRecognition
+              ? "Tap the mic, then talk. Your words will appear here."
+              : "Speech recognition is not supported in this browser. Try Safari or Chrome. Arrow keys and swipes still work.");
+          el.transcript.innerHTML = '<span class="placeholder">' + escapeHtml(msg) + "</span>";
+          return;
+        }
+        el.transcript.innerHTML =
+          (finalText ? '<span class="final">' + escapeHtml(finalText) + "</span>" : "") +
+          (finalText && interimText ? " " : "") +
+          (interimText ? '<span class="interim">' + escapeHtml(interimText) + "</span>" : "");
+      }
+
+      function renderLog() {
+        if (!entries.length) {
+          el.log.innerHTML = '<div class="log-empty">No commands yet.</div>';
+          return;
+        }
+        el.log.innerHTML = entries.map(function (row) {
+          const meta = COMMANDS[row.direction] || { arrow: "", command: row.command };
+          const spoken = (row.transcript || "").trim();
+          return (
+            '<article class="log-item">' +
+              '<div class="log-meta">' +
+                '<span class="log-dir">' + escapeHtml(meta.arrow + " " + row.direction) + "</span>" +
+                '<span class="log-cmd">' + escapeHtml(row.command) + "</span>" +
+                '<span class="log-time">' + escapeHtml(formatTime(row.timestamp)) + "</span>" +
+              "</div>" +
+              (spoken ? '<div class="log-text">' + escapeHtml(spoken) + "</div>" : "") +
+            "</article>"
+          );
+        }).join("");
+      }
+
+      function loadLocal() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          return [];
+        }
+      }
+
+      function saveLocal() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, 200)));
+        } catch (err) {
+          /* private mode or full storage */
+        }
+      }
+
+      async function hydrate() {
+        if (supabaseClient) {
+          setPill("Supabase", "online");
+          try {
+            const { data, error } = await supabaseClient
+              .from("swipe_commands")
+              .select("id, created_at, direction, command, transcript")
+              .order("created_at", { ascending: false })
+              .limit(50);
+            if (error) throw error;
+            entries = (data || []).map(function (row) {
+              return {
+                direction: row.direction,
+                command: row.command,
+                transcript: row.transcript || "",
+                timestamp: row.created_at
+              };
+            });
+            renderLog();
+            return;
+          } catch (err) {
+            setPill("Supabase error", "error");
+            entries = loadLocal();
+            renderLog();
+            return;
+          }
+        }
+        setPill("Local");
+        entries = loadLocal();
+        renderLog();
+      }
+
+      function showFlash(direction) {
+        const meta = COMMANDS[direction];
+        el.flashArrow.textContent = meta.arrow;
+        el.flashLabel.textContent = meta.flash;
+        el.flash.classList.add("show");
+        el.flash.setAttribute("aria-hidden", "false");
+        if (flashTimer) clearTimeout(flashTimer);
+        flashTimer = setTimeout(function () {
+          el.flash.classList.remove("show");
+          el.flash.setAttribute("aria-hidden", "true");
+        }, FLASH_MS);
+      }
+
+      async function persist(row) {
+        if (supabaseClient) {
+          try {
+            const { error } = await supabaseClient.from("swipe_commands").insert({
+              direction: row.direction,
+              command: row.command,
+              transcript: row.transcript || null
+            });
+            if (error) throw error;
+            setPill("Supabase", "online");
+            return;
+          } catch (err) {
+            setPill("Saved locally", "error");
+            saveLocal();
+            return;
+          }
+        }
+        saveLocal();
+      }
+
+      function currentTask() {
+        if (!queue.length) return null;
+        if (queueIndex >= queue.length) queueIndex = 0;
+        return queue[queueIndex];
+      }
+
+      function renderCard() {
+        const task = currentTask();
+        const left = queue.length;
+        el.reviewCount.textContent = left
+          ? left + (left === 1 ? " task to review" : " tasks to review")
+          : "Nothing waiting for review";
+        if (!task) {
+          el.reviewName.textContent = "You're caught up";
+          el.reviewMeta.textContent = "";
+          el.reviewDetails.textContent = "Approved tasks are Done. Dropped tasks are back in the backlog.";
+          return;
+        }
+        el.reviewName.textContent = task.name;
+        const bits = [task.task_id, task.priority, task.assigned_ai].filter(Boolean);
+        el.reviewMeta.textContent = bits.join(" · ");
+        const text = (task.details || "").trim();
+        el.reviewDetails.textContent = text.length > 700 ? text.slice(0, 700) + "…" : text;
+      }
+
+      async function loadQueue() {
+        if (!supabaseClient) {
+          el.reviewName.textContent = "This page couldn't connect to the task list.";
+          return;
+        }
+        if (!signedIn) {
+          el.reviewCount.textContent = "Sign in to review tasks";
+          el.reviewName.textContent = "Sign in first";
+          el.reviewMeta.textContent = "";
+          el.reviewDetails.innerHTML = 'Your tasks are private now. <a class="signin" href="./">Sign in on the Tables page</a>, then come back here.';
+          return;
+        }
+        const { data, error } = await supabaseClient
+          .from("ai_tasks")
+          .select("id,task_id,task_num,name,priority,assigned_ai,details,status")
+          .eq("status", "In review")
+          .order("task_num", { ascending: true });
+        if (error) {
+          el.reviewName.textContent = "Could not load the task list";
+          el.reviewDetails.textContent = error.message;
+          return;
+        }
+        queue = data || [];
+        queueIndex = 0;
+        renderCard();
+      }
+
+      async function reviewSwipe(direction) {
+        if (direction === "left") {
+          const prev = undoStack.pop();
+          if (!prev || !supabaseClient) return;
+          const { error } = await supabaseClient
+            .from("ai_tasks")
+            .update({ status: "In review", last_edited_at: new Date().toISOString() })
+            .eq("id", prev.id);
+          if (error) return;
+          queue.splice(Math.min(prev.index, queue.length), 0, prev.task);
+          queueIndex = Math.min(prev.index, queue.length - 1);
+          renderCard();
+          return;
+        }
+        const task = currentTask();
+        if (!task) return;
+        if (direction === "right") {
+          queueIndex = (queueIndex + 1) % queue.length;
+          renderCard();
+          return;
+        }
+        const nextStatus = direction === "up" ? "Done" : "Backlog";
+        const { error } = await supabaseClient
+          .from("ai_tasks")
+          .update({ status: nextStatus, last_edited_at: new Date().toISOString() })
+          .eq("id", task.id)
+          .eq("status", "In review");
+        if (error) {
+          el.reviewDetails.textContent = error.message;
+          return;
+        }
+        undoStack.push({ id: task.id, task: task, index: queueIndex });
+        queue.splice(queueIndex, 1);
+        if (queueIndex >= queue.length) queueIndex = 0;
+        renderCard();
+      }
+
+      function fire(direction) {
+        const now = Date.now();
+        if (now - lastFireAt < COOLDOWN_MS) return;
+        if (!COMMANDS[direction]) return;
+        lastFireAt = now;
+
+        const transcript = currentTranscript();
+        const row = {
+          direction: direction,
+          command: COMMANDS[direction].command,
+          transcript: transcript,
+          timestamp: new Date().toISOString()
+        };
+
+        entries.unshift(row);
+        renderLog();
+        showFlash(direction);
+        el.confirm.textContent = confirmationFor(direction, transcript);
+
+        committed = "";
+        interim = "";
+        renderTranscript();
+
+        persist(row);
+        reviewSwipe(direction);
+      }
+
+      function directionFromDelta(dx, dy) {
+        const adx = Math.abs(dx);
+        const ady = Math.abs(dy);
+        if (Math.max(adx, ady) < SWIPE_MIN) return null;
+        if (adx >= ady) return dx > 0 ? "right" : "left";
+        return dy > 0 ? "down" : "up";
+      }
+
+      function onTouchStart(event) {
+        if (event.touches.length !== 1) return;
+        const t = event.changedTouches[0];
+        pointer.active = true;
+        pointer.id = t.identifier;
+        pointer.x = t.clientX;
+        pointer.y = t.clientY;
+      }
+
+      function onTouchMove(event) {
+        if (!pointer.active) return;
+        event.preventDefault();
+      }
+
+      function onTouchEnd(event) {
+        if (!pointer.active) return;
+        let t = null;
+        for (let i = 0; i < event.changedTouches.length; i += 1) {
+          if (event.changedTouches[i].identifier === pointer.id) {
+            t = event.changedTouches[i];
+            break;
+          }
+        }
+        pointer.active = false;
+        pointer.id = null;
+        if (!t) return;
+        const dir = directionFromDelta(t.clientX - pointer.x, t.clientY - pointer.y);
+        if (dir) fire(dir);
+      }
+
+      function onTouchCancel() {
+        pointer.active = false;
+        pointer.id = null;
+      }
+
+      let mouseDown = false;
+      let mouseX = 0;
+      let mouseY = 0;
+
+      function onMouseDown(event) {
+        if (event.button !== 0) return;
+        mouseDown = true;
+        mouseX = event.clientX;
+        mouseY = event.clientY;
+      }
+
+      function onMouseUp(event) {
+        if (!mouseDown) return;
+        mouseDown = false;
+        const dir = directionFromDelta(event.clientX - mouseX, event.clientY - mouseY);
+        if (dir) fire(dir);
+      }
+
+      function onKeyDown(event) {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+        const map = {
+          ArrowUp: "up",
+          ArrowDown: "down",
+          ArrowLeft: "left",
+          ArrowRight: "right"
+        };
+        const dir = map[event.key];
+        if (!dir) return;
+        event.preventDefault();
+        fire(dir);
+      }
+
+      function stopRecognition() {
+        listening = false;
+        if (restartTimer) {
+          clearTimeout(restartTimer);
+          restartTimer = null;
+        }
+        if (recognition) {
+          try { recognition.onend = null; recognition.stop(); } catch (err) { /* already stopped */ }
+        }
+        el.mic.classList.remove("live");
+        el.mic.setAttribute("aria-pressed", "false");
+        el.mic.setAttribute("aria-label", "Start microphone");
+        renderTranscript();
+      }
+
+      function hookRecognition(rec) {
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = "en-US";
+        rec.maxAlternatives = 1;
+
+        rec.onresult = function (event) {
+          let nextInterim = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const piece = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              committed = (committed + " " + piece).replace(/\s+/g, " ").trim();
+            } else {
+              nextInterim += piece;
+            }
+          }
+          interim = nextInterim;
+          renderTranscript();
+        };
+
+        rec.onerror = function (event) {
+          const err = event.error;
+          if (err === "not-allowed" || err === "service-not-allowed") {
+            stopRecognition();
+            el.transcript.innerHTML = '<span class="placeholder">Microphone permission was denied. Enable it in Settings, then tap the mic again.</span>';
+            return;
+          }
+          if (err === "no-speech" || err === "aborted" || err === "audio-capture") {
+            return;
+          }
+        };
+
+        rec.onend = function () {
+          if (!listening) return;
+          restartTimer = setTimeout(function () {
+            if (!listening) return;
+            try {
+              rec.start();
+            } catch (err) {
+              restartTimer = setTimeout(function () {
+                if (listening) {
+                  try { rec.start(); } catch (err2) { /* will try again on next end */ }
+                }
+              }, 300);
+            }
+          }, 180);
+        };
+      }
+
+      function startRecognition() {
+        if (!SpeechRecognition) {
+          el.transcript.innerHTML = '<span class="placeholder">Speech recognition is not supported in this browser. Try Safari or Chrome. Arrow keys and swipes still work.</span>';
+          return;
+        }
+        if (listening) {
+          stopRecognition();
+          return;
+        }
+        if (!recognition) {
+          recognition = new SpeechRecognition();
+          hookRecognition(recognition);
+        }
+        interim = "";
+        listening = true;
+        el.mic.classList.add("live");
+        el.mic.setAttribute("aria-pressed", "true");
+        el.mic.setAttribute("aria-label", "Stop microphone");
+        renderTranscript();
+        try {
+          recognition.start();
+        } catch (err) {
+          /* already started */
+        }
+      }
+
+      el.pad.addEventListener("touchstart", onTouchStart, { passive: true });
+      el.pad.addEventListener("touchmove", onTouchMove, { passive: false });
+      el.pad.addEventListener("touchend", onTouchEnd, { passive: true });
+      el.pad.addEventListener("touchcancel", onTouchCancel, { passive: true });
+      el.pad.addEventListener("mousedown", onMouseDown);
+      window.addEventListener("mouseup", onMouseUp);
+      window.addEventListener("keydown", onKeyDown);
+      el.mic.addEventListener("click", startRecognition);
+
+      if (!SpeechRecognition) {
+        el.mic.disabled = true;
+        renderTranscript();
+      }
+
+      async function connect() {
+        try {
+          const res = await fetch(FUNCTION_BASE + "config.json", { cache: "no-store" });
+          const cfg = res.ok ? await res.json() : {};
+          if (cfg.url && cfg.anonKey && window.supabase) {
+            // Same storage key as the Tables page, so one sign-in covers both.
+            supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey, {
+              auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit", storageKey: "swipe-tables-dallavia" }
+            });
+            signedIn = Boolean((await supabaseClient.auth.getSession()).data.session);
+          }
+        } catch (err) { /* stays offline; commands save locally */ }
+        hydrate();
+        loadQueue();
+      }
+
+      renderTranscript();
+      connect();
+    })();
+  </script>
+</body>
+</html>

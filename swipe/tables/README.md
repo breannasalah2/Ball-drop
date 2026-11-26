@@ -43,10 +43,17 @@ only what the public key sees.
 The function uses only the secrets every Supabase project has
 (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`).
 
+## Review pad (`review.html`)
+
+The talk-then-swipe task review (↑ approve = Done, ↓ drop = Backlog, → next, ← undo), moved
+here from the `swipe-app` function and pointed at the DallaVia database. It now runs as you:
+sign in once on the Tables page (same browser) and the pad shows your "In review" tasks. The
+public key can no longer read or change tasks, so the Chrome extension's built-in review card
+(which uses the public key and the old, paused swipe-app project) no longer loads tasks.
+
 ## Plan: fold into the swipe app on Vercel (draft, not live)
 
 1. Host the whole `swipe/` folder from this Vercel project: `/` is the review swipe pad, `/tables/` is this page, with a tab between them.
-2. Point the review pad at the DallaVia database (the old swipe-app project is paused) and give it the same sign-in, so task review runs as the owner instead of the public key.
-3. Once the pad reads and writes as the owner, remove the public read/update rules on `ai_tasks` (today any holder of the public key can read and change tasks that are "In review").
-4. Point the Chrome extension's fallback link at the Vercel address.
-5. Nothing goes live until Breanna says so.
+2. Done in this draft: the review pad reads DallaVia with your sign-in, and the public read/update rules on `ai_tasks` are removed.
+3. Point the Chrome extension's side panel at the Vercel review pad (it still carries its own copy that uses the public key).
+4. Nothing goes live until Breanna says so.
