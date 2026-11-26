@@ -57,6 +57,19 @@
       text-transform: uppercase;
     }
     .brand p { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+    .hright { display: flex; align-items: flex-end; gap: 8px; }
+    #auth-panel {
+      margin: 4px 12px 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px;
+      background: var(--bg-elev); font-size: 14px; line-height: 1.45;
+    }
+    #auth-panel p { margin-bottom: 8px; color: var(--soft); }
+    #auth-panel input {
+      width: 100%; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+      color: var(--text); font-size: 16px; padding: 9px 10px; margin-bottom: 8px;
+    }
+    #auth-panel .row { display: flex; gap: 6px; flex-wrap: wrap; }
+    #auth-panel .go { border: 1px solid rgba(225, 6, 0, 0.6); background: var(--red-dim); color: #fff; border-radius: 999px; padding: 7px 12px; font-size: 13px; }
+    #auth-panel .msg { color: var(--muted); font-size: 13px; margin-top: 6px; }
     .dbpick { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
     .dbpick select {
       background: var(--bg-elev); color: var(--text); border: 1px solid var(--line);
@@ -236,10 +249,14 @@
         <h1>Swipe</h1>
         <p>Any table, and the tables linked to it</p>
       </div>
-      <label class="dbpick">Database
-        <select id="db-pick" aria-label="Database"></select>
-      </label>
+      <div class="hright">
+        <label class="dbpick">Database
+          <select id="db-pick" aria-label="Database"></select>
+        </label>
+        <button class="chip" id="auth-btn" type="button" hidden>Sign in</button>
+      </div>
     </header>
+    <section id="auth-panel" hidden aria-label="Sign in"></section>
 
     <div id="crumbs" aria-label="Where you are"></div>
     <div id="toolbar">
@@ -258,8 +275,7 @@
     /* Databases this page can browse: each is a project running the swipe-tables
        function. The first is the default; add ?db=<key> to the address to pick another. */
     const DATABASES = {
-      "dallavia": { label: "DallaVia", base: "https://lqxaiaiewdseplbuxddz.supabase.co/functions/v1/swipe-tables/" },
-      "swipe-app": { label: "Swipe app (old)", base: "https://khyejqvutrjwxljuhmot.supabase.co/functions/v1/swipe-tables/" }
+      "dallavia": { label: "DallaVia", base: "https://lqxaiaiewdseplbuxddz.supabase.co/functions/v1/swipe-tables/" }
     };
   </script>
   <script>
@@ -370,7 +386,9 @@
 
     /* ---------- data ---------- */
     async function loadSchema() {
-      const res = await fetch(FUNCTION_BASE + "schema.json", { cache: "no-store" });
+      const sess = (await client.auth.getSession()).data.session;
+      const headers = sess ? { Authorization: "Bearer " + sess.access_token } : {};
+      const res = await fetch(FUNCTION_BASE + "schema.json", { cache: "no-store", headers: headers });
       if (!res.ok) throw new Error("The table list did not load (" + res.status + ").");
       schema = await res.json();
       (schema.tables || []).forEach(function (t) { T[t.name] = t; OUT[t.name] = []; IN[t.name] = []; });
@@ -479,7 +497,7 @@
     function renderTables() {
       const tables = schema.tables || [];
       if (!tables.length) {
-        el.main.appendChild(h("div", { class: "empty", text: "No table here is open to this page yet. This database's access rules (RLS) keep every table private, so it needs a sign-in for you before its tables can show." }));
+        el.main.appendChild(h("div", { class: "empty", text: "No table here is open to this page yet. Sign in (top right) to see your private tables." }));
         return;
       }
       const search = h("input", { id: "search", type: "search", placeholder: "Find a table", autocomplete: "off", "aria-label": "Find a table" });
@@ -749,6 +767,7 @@
 
     const pick = document.getElementById("db-pick");
     dbKeys.forEach(function (k) { pick.appendChild(h("option", { value: k, text: DATABASES[k].label, selected: k === dbKey })); });
+    if (dbKeys.length < 2) pick.parentNode.hidden = true;
     pick.addEventListener("change", function () {
       const u = new URL(location.href);
       u.searchParams.set("db", pick.value);
@@ -758,6 +777,72 @@
     el.cards.addEventListener("click", function () { setMode("cards"); });
     el.tree.addEventListener("click", function () { setMode("tree"); });
 
+    /* ---------- sign-in (read-only access to your private tables) ---------- */
+    function setupAuth() {
+      const btn = document.getElementById("auth-btn");
+      const panel = document.getElementById("auth-panel");
+      btn.hidden = false;
+      client.auth.getSession().then(function (r) {
+        const sess = r.data.session;
+        btn.textContent = sess ? "Signed in" : "Sign in";
+        btn.classList.toggle("on", Boolean(sess));
+      });
+      btn.addEventListener("click", async function () {
+        if (!panel.hidden) { panel.hidden = true; return; }
+        const sess = (await client.auth.getSession()).data.session;
+        panel.textContent = "";
+        if (sess) {
+          const note = schema.owner
+            ? "You're signed in as " + sess.user.email + ", so your private tables show here (read-only)."
+            : "You're signed in as " + sess.user.email + ", but that account isn't set up to see private tables.";
+          panel.appendChild(h("p", { text: note }));
+          panel.appendChild(h("div", { class: "row" }, [h("button", { class: "go", type: "button", text: "Sign out", onclick: async function () {
+            await client.auth.signOut();
+            location.reload();
+          } })]));
+        } else {
+          const email = h("input", { type: "email", placeholder: "Your email", autocomplete: "email", "aria-label": "Email" });
+          const msg = h("p", { class: "msg" });
+          const pasteBox = h("div", { hidden: true }, [
+            h("p", { text: "Open the link in the email on this device. If it doesn't bring you back here, copy the link instead (don't open it) and paste it here:" }),
+            h("input", { type: "url", placeholder: "Paste the sign-in link", "aria-label": "Sign-in link", id: "paste-link" }),
+            h("div", { class: "row" }, [h("button", { class: "go", type: "button", text: "Sign in with link", onclick: usePastedLink })])
+          ]);
+          async function sendLink() {
+            const addr = email.value.trim();
+            if (!addr) { msg.textContent = "Enter your email first."; return; }
+            msg.textContent = "Sending…";
+            const r = await client.auth.signInWithOtp({ email: addr, options: { emailRedirectTo: location.origin + location.pathname + location.search } });
+            if (r.error) { msg.textContent = "That didn't work: " + r.error.message; return; }
+            msg.textContent = "Check your email for a sign-in link.";
+            pasteBox.hidden = false;
+          }
+          async function usePastedLink() {
+            const raw = document.getElementById("paste-link").value.trim();
+            let u;
+            try { u = new URL(raw); } catch (e) { msg.textContent = "That doesn't look like a link."; return; }
+            const hash = new URLSearchParams(u.hash.replace(/^#/, ""));
+            let r;
+            if (hash.get("access_token")) {
+              r = await client.auth.setSession({ access_token: hash.get("access_token"), refresh_token: hash.get("refresh_token") || "" });
+            } else {
+              const token = u.searchParams.get("token") || u.searchParams.get("token_hash");
+              if (!token) { msg.textContent = "That link has no sign-in code in it."; return; }
+              r = await client.auth.verifyOtp({ token_hash: token, type: u.searchParams.get("type") || "magiclink" });
+            }
+            if (r.error) { msg.textContent = "That link didn't work: " + r.error.message; return; }
+            location.reload();
+          }
+          panel.appendChild(h("p", { text: "Sign in to see your private tables. You can only read here; nothing can be changed." }));
+          panel.appendChild(email);
+          panel.appendChild(h("div", { class: "row" }, [h("button", { class: "go", type: "button", text: "Email me a sign-in link", onclick: sendLink })]));
+          panel.appendChild(msg);
+          panel.appendChild(pasteBox);
+        }
+        panel.hidden = false;
+      });
+    }
+
     /* ---------- start ---------- */
     async function start() {
       stack.push({ type: "tables" });
@@ -765,8 +850,13 @@
         const res = await fetch(FUNCTION_BASE + "config.json", { cache: "no-store" });
         const cfg = res.ok ? await res.json() : {};
         if (!cfg.url || !cfg.anonKey || !window.supabase) throw new Error("This page isn't connected to a database.");
-        client = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: false } });
+        client = window.supabase.createClient(cfg.url, cfg.anonKey, {
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit", storageKey: "swipe-tables-" + dbKey }
+        });
+        await client.auth.getSession();   // picks up a sign-in link that brought you here
+        if (location.hash.indexOf("access_token") >= 0) history.replaceState(null, "", location.pathname + location.search);
         await loadSchema();
+        setupAuth();
       } catch (err) {
         el.main.textContent = "";
         el.main.appendChild(h("div", { class: "err", text: err.message || String(err) }));

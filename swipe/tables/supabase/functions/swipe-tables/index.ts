@@ -12,7 +12,9 @@
 //
 // Routes (under /functions/v1/swipe-tables):
 //   /config.json  { url, anonKey }
-//   /schema.json  the catalog
+//   /schema.json  the catalog. With a signed-in user's token in Authorization,
+//                 and that user's email in public.app_owners, it lists what the
+//                 'authenticated' role can read instead of what the public key can.
 //
 // (Supabase serves HTML from functions as plain text, so the page itself
 // can't be hosted here.)
@@ -50,15 +52,38 @@ function route(req: Request): string {
   return (idx >= 0 ? path.slice(idx + FUNCTION_NAME.length + 1) : path).replace(/^\/+/, "");
 }
 
-let cached: { at: number; body: string } | null = null;
+const cached: Record<string, { at: number; body: unknown }> = {};
 const CACHE_MS = 30_000;
 
-async function catalog(): Promise<string> {
-  if (cached && Date.now() - cached.at < CACHE_MS) return cached.body;
-  const rows = await db().begin("read only", (tx) => tx.unsafe(SCHEMA_SQL));
-  const body = JSON.stringify(rows[0]?.schema ?? { tables: [], links: [] });
-  cached = { at: Date.now(), body };
+async function catalog(role: "anon" | "authenticated"): Promise<unknown> {
+  const hit = cached[role];
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.body;
+  const rows = await db().begin("read only", (tx) => tx.unsafe(SCHEMA_SQL, [role]));
+  const body = rows[0]?.schema ?? { tables: [], links: [] };
+  cached[role] = { at: Date.now(), body };
   return body;
+}
+
+// Who is asking: the signed-in user's email if the token checks out with Supabase Auth.
+async function signedInEmail(req: Request): Promise<string | null> {
+  const auth = req.headers.get("authorization") ?? "";
+  const token = auth.replace(/^Bearer\s+/i, "");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  if (!token || token === anonKey || !url) return null;
+  const res = await fetch(url.replace(/\/+$/, "") + "/auth/v1/user", {
+    headers: { apikey: anonKey, Authorization: "Bearer " + token },
+  });
+  if (!res.ok) return null;
+  const user = await res.json();
+  return typeof user?.email === "string" ? user.email.toLowerCase() : null;
+}
+
+async function isOwner(email: string): Promise<boolean> {
+  const rows = await db().begin("read only", (tx) =>
+    tx.unsafe("select exists (select 1 from public.app_owners where email = lower($1)) as ok", [email])
+  );
+  return Boolean(rows[0]?.ok);
 }
 
 function reply(body: string | null, status = 200): Response {
@@ -76,7 +101,10 @@ Deno.serve(async (req: Request) => {
       return reply(head ? null : body);
     }
     if (name === "schema.json") {
-      const body = await catalog();
+      const email = await signedInEmail(req);
+      const owner = email ? await isOwner(email) : false;
+      const schema = await catalog(owner ? "authenticated" : "anon");
+      const body = JSON.stringify({ ...(schema as object), signed_in: Boolean(email), owner });
       return reply(head ? null : body);
     }
   } catch (err) {

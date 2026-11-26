@@ -11,12 +11,12 @@ export const SCHEMA_SQL = String.raw`with rel as (
              where p.polrelid = c.oid
                and p.polcmd in ('r', '*')
                and p.polpermissive
-               and (p.polroles @> array[0::oid] or p.polroles @> array['anon'::regrole::oid]))
+               and (p.polroles @> array[0::oid] or p.polroles @> array[$1::text::regrole::oid]))
          else true end as readable
   from pg_class c
   where c.relnamespace = 'public'::regnamespace
     and c.relkind in ('r', 'p', 'v', 'm')
-    and has_table_privilege('anon', c.oid, 'SELECT')
+    and has_table_privilege($1::text::name, c.oid, 'SELECT')
 ), vis as (
   select * from rel where readable
 )
@@ -31,7 +31,7 @@ select json_build_object(
         select json_agg(json_build_object('name', a.attname, 'type', format_type(a.atttypid, a.atttypmod)) order by a.attnum)
         from pg_attribute a
         where a.attrelid = v.oid and a.attnum > 0 and not a.attisdropped
-          and has_column_privilege('anon', v.oid, a.attnum, 'SELECT')),
+          and has_column_privilege($1::text::name, v.oid, a.attnum, 'SELECT')),
       'pk', (
         select json_agg(a.attname order by k.ord)
         from pg_index i

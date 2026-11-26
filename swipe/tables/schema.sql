@@ -1,8 +1,9 @@
 -- Swipe Tables: catalog query used by the swipe-tables edge function.
--- Read-only. Lists only relations in the public schema that the public (anon)
--- key can actually read: SELECT granted, and for tables either RLS off or a
--- permissive SELECT/ALL policy for anon or public. Rows themselves are never
--- read here; the browser fetches rows with the public key, so RLS decides.
+-- Read-only. $1 is the database role the page will read as: 'anon' (public
+-- key) or 'authenticated' (a signed-in owner). Lists only relations in the
+-- public schema that role can read: SELECT granted, and for tables either RLS
+-- off or a permissive SELECT/ALL policy for that role or public. Rows are never
+-- read here; the browser fetches rows itself, so RLS decides what shows.
 with rel as (
   select c.oid,
          c.relname::text as name,
@@ -15,12 +16,12 @@ with rel as (
              where p.polrelid = c.oid
                and p.polcmd in ('r', '*')
                and p.polpermissive
-               and (p.polroles @> array[0::oid] or p.polroles @> array['anon'::regrole::oid]))
+               and (p.polroles @> array[0::oid] or p.polroles @> array[$1::text::regrole::oid]))
          else true end as readable
   from pg_class c
   where c.relnamespace = 'public'::regnamespace
     and c.relkind in ('r', 'p', 'v', 'm')
-    and has_table_privilege('anon', c.oid, 'SELECT')
+    and has_table_privilege($1::text::name, c.oid, 'SELECT')
 ), vis as (
   select * from rel where readable
 )
@@ -35,7 +36,7 @@ select json_build_object(
         select json_agg(json_build_object('name', a.attname, 'type', format_type(a.atttypid, a.atttypmod)) order by a.attnum)
         from pg_attribute a
         where a.attrelid = v.oid and a.attnum > 0 and not a.attisdropped
-          and has_column_privilege('anon', v.oid, a.attnum, 'SELECT')),
+          and has_column_privilege($1::text::name, v.oid, a.attnum, 'SELECT')),
       'pk', (
         select json_agg(a.attname order by k.ord)
         from pg_index i
