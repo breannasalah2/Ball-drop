@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#E10600">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Swipe Tables">
+  <meta name="description" content="Swipe through any table and follow its linked tables.">
+  <title>Swipe Tables</title>
+  <style>
+    :root {
+      --red: #E10600;
+      --red-dim: rgba(225, 6, 0, 0.18);
+      --red-glow: rgba(225, 6, 0, 0.55);
+      --bg: #0a0a0a;
+      --bg-elev: #161616;
+      --bg-2: #111111;
+      --text: #f5f5f5;
+      --muted: #8a8a8a;
+      --soft: #c9c9c9;
+      --line: #2a2a2a;
+      --safe-t: env(safe-area-inset-top, 0px);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overscroll-behavior: none;
+    }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    #app {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding: var(--safe-t) 0 var(--safe-b);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px 6px;
+    }
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      color: var(--red);
+      text-transform: uppercase;
+    }
+    .brand p { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+    .tabs { display: flex; gap: 6px; }
+    .tabs a, .tabs button, .chip {
+      font-size: 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: var(--soft);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .tabs .on, .chip.on { color: #fff; border-color: rgba(225, 6, 0, 0.6); background: var(--red-dim); }
+
+    #crumbs {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 16px 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    #crumbs button { color: var(--soft); padding: 2px 4px; border-radius: 6px; text-align: left; }
+    #crumbs button:hover { background: var(--bg-elev); }
+    #crumbs .here { color: var(--text); font-weight: 600; }
+    #crumbs .sep { color: #555; }
+
+    #toolbar { display: flex; gap: 6px; padding: 0 16px 8px; align-items: center; flex-wrap: wrap; }
+    #toolbar .spacer { flex: 1; }
+    #status { font-size: 12px; color: var(--muted); }
+
+    main { flex: 1; padding: 0 12px 12px; }
+
+    /* Table picker */
+    #search {
+      width: 100%;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 16px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .tlist { display: flex; flex-direction: column; gap: 6px; }
+    .trow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      text-align: left;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .trow:hover { border-color: #3a3a3a; }
+    .trow .tname { font-weight: 600; font-size: 15px; word-break: break-word; }
+    .trow .tmeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .trow .grow { flex: 1; min-width: 0; }
+    .count {
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      color: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+    .group-label {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 14px 4px 6px;
+    }
+
+    /* Card */
+    #pad {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: radial-gradient(ellipse at top, rgba(225, 6, 0, 0.08), transparent 60%), var(--bg-elev);
+      padding: 16px 16px 12px;
+      touch-action: pan-y;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: transform 0.12s ease;
+    }
+    .card-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+    .card-title { font-size: 20px; font-weight: 700; line-height: 1.25; margin: 6px 0 10px; word-break: break-word; }
+    dl.fields { display: grid; grid-template-columns: minmax(90px, 32%) 1fr; gap: 6px 12px; font-size: 14px; }
+    dl.fields dt { color: var(--muted); word-break: break-word; }
+    dl.fields dd { word-break: break-word; white-space: pre-wrap; line-height: 1.35; }
+    dd .more { color: #f3b4b1; font-size: 12px; margin-left: 4px; }
+    .nullv { color: #555; }
+
+    .links { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+    .links h3 { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 6px 0 6px; }
+    .link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-bottom: 6px;
+      background: var(--bg-2);
+      font-size: 14px;
+    }
+    .link.first { border-color: rgba(225, 6, 0, 0.55); }
+    .link .lt { flex: 1; min-width: 0; word-break: break-word; }
+    .link .via { color: var(--muted); font-size: 12px; }
+    .link[disabled] { opacity: 0.45; cursor: default; }
+    .nolinks { font-size: 13px; color: var(--muted); }
+
+    .nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+    .nav button {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 4px;
+      font-size: 12px;
+      color: var(--soft);
+      background: var(--bg-2);
+    }
+    .nav button .arr { display: block; font-size: 18px; color: var(--red); }
+    .nav button[disabled] { opacity: 0.35; }
+
+    /* Tree */
+    .tree { font-size: 14px; }
+    .node { margin-left: 0; }
+    .node .kids { margin-left: 16px; border-left: 1px solid var(--line); padding-left: 8px; }
+    .nline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      text-align: left;
+      padding: 7px 6px;
+      border-radius: 8px;
+    }
+    .nline:hover { background: var(--bg-elev); }
+    .twisty { width: 14px; color: var(--red); flex-shrink: 0; font-size: 12px; }
+    .nline .lt { flex: 1; min-width: 0; word-break: break-word; }
+    .nline .kind { font-size: 11px; color: var(--muted); }
+    .open-card { font-size: 12px; color: #f3b4b1; padding: 2px 6px; }
+
+    .empty, .err {
+      padding: 24px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .err { color: #ffb4b4; }
+    .loadmore { width: 100%; padding: 10px; margin-top: 8px; border: 1px dashed var(--line); border-radius: 12px; color: var(--soft); }
+
+    #flash {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      pointer-events: none; opacity: 0; transition: opacity 0.12s ease; z-index: 40;
+      font-size: clamp(28px, 10vw, 56px); font-weight: 800; letter-spacing: 0.12em; color: var(--red);
+      text-shadow: 0 0 24px var(--red-glow);
+    }
+    #flash.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="brand">
+        <h1>Swipe</h1>
+        <p>Any table, and the tables linked to it</p>
+      </div>
+    </header>
+
+    <div id="crumbs" aria-label="Where you are"></div>
+    <div id="toolbar">
+      <button class="chip on" id="mode-cards" type="button">Cards</button>
+      <button class="chip" id="mode-tree" type="button">Tree</button>
+      <span class="spacer"></span>
+      <span id="status" aria-live="polite"></span>
+    </div>
+
+    <main id="main"><div class="empty">Loading your tables…</div></main>
+  </div>
+  <div id="flash" aria-hidden="true"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script>
+    /* The swipe-tables Supabase function for the database to browse.
+       Point this at the same function in another project to browse that one. */
+    const FUNCTION_BASE = "https://khyejqvutrjwxljuhmot.supabase.co/functions/v1/swipe-tables/";
+  </script>
+  <script>
+  (function () {
+    "use strict";
+
+    const PAGE = 50;
+    const SWIPE_MIN = 56;
+    const LABEL_COLS = ["name", "title", "display_name", "full_name", "handle", "username", "label",
+      "subject", "task_id", "key", "slug", "email", "command", "description"];
+
+    const el = {
+      main: document.getElementById("main"),
+      crumbs: document.getElementById("crumbs"),
+      status: document.getElementById("status"),
+      cards: document.getElementById("mode-cards"),
+      tree: document.getElementById("mode-tree"),
+      flash: document.getElementById("flash")
+    };
+
+    let client = null;
+
+    let schema = { tables: [], links: [] };
+    const T = {};          // table name -> table info
+    const OUT = {};        // table -> links where this table holds the foreign key
+    const IN = {};         // table -> links that point at this table
+    const counts = {};     // table -> visible row count
+    const stack = [];      // breadcrumb levels
+    let mode = "cards";
+
+    /* ---------- small helpers ---------- */
+    function h(tag, attrs, kids) {
+      const n = document.createElement(tag);
+      if (attrs) for (const k in attrs) {
+        const v = attrs[k];
+        if (v == null || v === false) continue;
+        if (k === "class") n.className = v;
+        else if (k === "text") n.textContent = v;
+        else if (k.slice(0, 2) === "on") n.addEventListener(k.slice(2), v);
+        else n.setAttribute(k, v === true ? "" : v);
+      }
+      (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+      return n;
+    }
+    function setStatus(t) { el.status.textContent = t || ""; }
+    function flash(t) {
+      el.flash.textContent = t;
+      el.flash.classList.add("show");
+      clearTimeout(flash.t);
+      flash.t = setTimeout(function () { el.flash.classList.remove("show"); }, 450);
+    }
+    function pretty(name) { return String(name).replace(/_/g, " "); }
+    function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+
+    function fmt(v) {
+      if (v === null || v === undefined || v === "") return null;
+      if (typeof v === "object") return JSON.stringify(v, null, 1);
+      if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) {
+        const d = new Date(v);
+        if (!isNaN(d)) return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      }
+      return String(v);
+    }
+
+    function labelCol(table) {
+      const t = T[table];
+      if (!t) return null;
+      const names = (t.columns || []).map(function (c) { return c.name; });
+      for (let i = 0; i < LABEL_COLS.length; i++) if (names.indexOf(LABEL_COLS[i]) >= 0) return LABEL_COLS[i];
+      const txt = (t.columns || []).find(function (c) { return /^(text|character varying)/.test(c.type) && (t.pk || []).indexOf(c.name) < 0; });
+      return txt ? txt.name : null;
+    }
+    function rowLabel(table, row) {
+      const col = labelCol(table);
+      let v = col ? fmt(row[col]) : null;
+      if (!v) {
+        const pk = (T[table] && T[table].pk) || [];
+        v = pk.length ? pk.map(function (k) { return row[k]; }).join(" · ") : null;
+      }
+      if (!v) { const first = Object.keys(row)[0]; v = first ? fmt(row[first]) : null; }
+      v = v || "(blank)";
+      return v.length > 120 ? v.slice(0, 120) + "…" : v;
+    }
+
+    function filterFor(cols, sourceCols, row) {
+      const f = {};
+      for (let i = 0; i < cols.length; i++) {
+        const v = row[sourceCols[i]];
+        if (v === null || v === undefined) return null;
+        f[cols[i]] = v;
+      }
+      return f;
+    }
+    function applyFilter(q, filter) {
+      Object.keys(filter || {}).forEach(function (k) { q = q.eq(k, filter[k]); });
+      return q;
+    }
+    function orderBy(q, table) {
+      const pk = (T[table] && T[table].pk) || [];
+      pk.forEach(function (k) { q = q.order(k, { ascending: true }); });
+      return q;
+    }
+
+    /* ---------- data ---------- */
+    async function loadSchema() {
+      const res = await fetch(FUNCTION_BASE + "schema.json", { cache: "no-store" });
+      if (!res.ok) throw new Error("The table list did not load (" + res.status + ").");
+      schema = await res.json();
+      (schema.tables || []).forEach(function (t) { T[t.name] = t; OUT[t.name] = []; IN[t.name] = []; });
+      (schema.links || []).forEach(function (l) {
+        if (OUT[l.from]) OUT[l.from].push(l);
+        if (IN[l.to]) IN[l.to].push(l);
+      });
+    }
+
+    async function countRows(table, filter) {
+      let q = client.from(table).select("*", { count: "exact", head: true });
+      q = applyFilter(q, filter);
+      const r = await q;
+      if (r.error) return null;
+      return r.count;
+    }
+
+    async function fetchRows(table, filter, from, to) {
+      let q = client.from(table).select("*", { count: "exact" });
+      q = applyFilter(q, filter);
+      q = orderBy(q, table);
+      const r = await q.range(from, to);
+      if (r.error) throw r.error;
+      return { rows: r.data || [], total: r.count };
+    }
+
+    async function fetchOne(table, filter) {
+      let q = client.from(table).select("*");
+      q = applyFilter(q, filter);
+      const r = await q.limit(1);
+      if (r.error) throw r.error;
+      return (r.data || [])[0] || null;
+    }
+
+    /* ---------- navigation ---------- */
+    function top() { return stack[stack.length - 1]; }
+
+    function pushDeck(table, filter, title) {
+      stack.push({ type: "deck", table: table, filter: filter || null, title: title || pretty(table), rows: [], index: 0, total: null, loading: false, error: null, done: false });
+      flash("OPEN");
+      render();
+      loadMore();
+    }
+    function rollUp(toIndex) {
+      if (stack.length <= 1) return;
+      const target = toIndex == null ? stack.length - 2 : toIndex;
+      stack.length = Math.max(1, target + 1);
+      flash("BACK UP");
+      render();
+    }
+
+    async function loadMore() {
+      const d = top();
+      if (!d || d.type !== "deck" || d.loading || d.done) return;
+      d.loading = true;
+      setStatus("Loading…");
+      try {
+        const got = await fetchRows(d.table, d.filter, d.rows.length, d.rows.length + PAGE - 1);
+        d.rows = d.rows.concat(got.rows);
+        d.total = got.total;
+        if (!got.rows.length || (d.total != null && d.rows.length >= d.total)) d.done = true;
+      } catch (err) {
+        d.error = err.message || String(err);
+      }
+      d.loading = false;
+      setStatus("");
+      if (top() === d) render();
+    }
+
+    function step(delta) {
+      const d = top();
+      if (!d || d.type !== "deck" || !d.rows.length) return;
+      const next = d.index + delta;
+      if (next < 0) return;
+      if (next >= d.rows.length) {
+        if (!d.done) { d.index = next; loadMore(); return; }
+        return;
+      }
+      d.index = next;
+      flash(delta > 0 ? "NEXT" : "PREVIOUS");
+      render();
+    }
+
+    /* ---------- rendering ---------- */
+    function renderCrumbs() {
+      el.crumbs.textContent = "";
+      stack.forEach(function (lvl, i) {
+        const last = i === stack.length - 1;
+        if (i) el.crumbs.appendChild(h("span", { class: "sep", text: "›" }));
+        const label = lvl.type === "tables" ? "All tables" : lvl.title;
+        if (last) el.crumbs.appendChild(h("span", { class: "here", text: label }));
+        else el.crumbs.appendChild(h("button", { type: "button", text: label, onclick: function () { rollUp(i); } }));
+      });
+    }
+
+    function render() {
+      renderCrumbs();
+      const lvl = top();
+      el.main.textContent = "";
+      document.getElementById("toolbar").style.display = lvl.type === "deck" ? "" : "none";
+      if (lvl.type === "tables") return renderTables();
+      if (mode === "tree") return renderTree(lvl);
+      return renderCard(lvl);
+    }
+
+    function renderTables() {
+      const tables = schema.tables || [];
+      if (!tables.length) {
+        el.main.appendChild(h("div", { class: "empty", text: "The public key can't read any table in this database yet. Nothing is hidden by mistake: access rules (RLS) decide what shows here." }));
+        return;
+      }
+      const search = h("input", { id: "search", type: "search", placeholder: "Find a table", autocomplete: "off", "aria-label": "Find a table" });
+      el.main.appendChild(search);
+      const box = h("div");
+      el.main.appendChild(box);
+      function draw() {
+        const q = search.value.trim().toLowerCase();
+        box.textContent = "";
+        ["table", "view"].forEach(function (kind) {
+          const list = tables.filter(function (t) { return t.kind === kind && (!q || t.name.toLowerCase().indexOf(q) >= 0); });
+          if (!list.length) return;
+          box.appendChild(h("div", { class: "group-label", text: kind === "table" ? "Tables" : "Saved views" }));
+          const ul = h("div", { class: "tlist" });
+          list.forEach(function (t) {
+            const nlinks = (OUT[t.name] || []).length + (IN[t.name] || []).length;
+            const meta = [plural((t.columns || []).length, "column", "columns")];
+            if (nlinks) meta.push(plural(nlinks, "link", "links"));
+            if (t.comment) meta.push(t.comment);
+            const c = counts[t.name];
+            ul.appendChild(h("button", { class: "trow", type: "button", onclick: function () { pushDeck(t.name, null, pretty(t.name)); } }, [
+              h("div", { class: "grow" }, [h("div", { class: "tname", text: pretty(t.name) }), h("div", { class: "tmeta", text: meta.join(" · ") })]),
+              h("span", { class: "count", text: c == null ? "…" : (c === -1 ? "?" : String(c)) })
+            ]));
+          });
+          box.appendChild(ul);
+        });
+      }
+      search.addEventListener("input", draw);
+      draw();
+    }
+
+    function fieldList(table, row) {
+      const dl = h("dl", { class: "fields" });
+      Object.keys(row).forEach(function (k) {
+        const v = fmt(row[k]);
+        dl.appendChild(h("dt", { text: pretty(k) }));
+        if (v == null) { dl.appendChild(h("dd", {}, [h("span", { class: "nullv", text: "—" })])); return; }
+        if (v.length <= 280) { dl.appendChild(h("dd", { text: v })); return; }
+        const dd = h("dd", { text: v.slice(0, 280) + "…" });
+        const more = h("button", { class: "more", type: "button", text: "More", onclick: function (e) { e.stopPropagation(); dd.textContent = v; } });
+        dd.appendChild(more);
+        dl.appendChild(dd);
+      });
+      return dl;
+    }
+
+    /* Returns [{kind:'out'|'in', link, filter, title, button}] and fills in labels/counts as they load. */
+    function linkButtons(table, row, onFirstReady) {
+      const items = [];
+      (OUT[table] || []).forEach(function (l) {
+        const filter = filterFor(l.to_cols, l.from_cols, row);
+        const lt = h("span", { class: "lt" }, [pretty(l.to) + " ", h("span", { class: "via", text: filter ? "loading…" : "none set" })]);
+        const btn = h("button", { class: "link", type: "button", disabled: !filter }, [h("span", { class: "twisty", text: "↑" }), lt]);
+        const item = { kind: "out", link: l, filter: filter, title: pretty(l.to), button: btn, ready: false };
+        btn.addEventListener("click", function () { if (item.filter) pushDeck(l.to, item.filter, item.title); });
+        if (filter) fetchOne(l.to, filter).then(function (target) {
+          lt.lastChild.textContent = target ? rowLabel(l.to, target) : "not visible";
+          if (target) { item.title = rowLabel(l.to, target); item.ready = true; onFirstReady(); }
+          else btn.disabled = true;
+        }).catch(function () { lt.lastChild.textContent = "could not load"; btn.disabled = true; });
+        items.push(item);
+      });
+      (IN[table] || []).forEach(function (l) {
+        const filter = filterFor(l.from_cols, l.to_cols, row);
+        const via = l.from_cols.join(", ");
+        const lt = h("span", { class: "lt" }, [pretty(l.from) + " ", h("span", { class: "via", text: "via " + pretty(via) })]);
+        const cnt = h("span", { class: "count", text: "…" });
+        const btn = h("button", { class: "link", type: "button", disabled: !filter }, [h("span", { class: "twisty", text: "↓" }), lt, cnt]);
+        const item = { kind: "in", link: l, filter: filter, title: pretty(l.from) + " for " + rowLabel(table, row), button: btn, ready: false };
+        btn.addEventListener("click", function () { if (item.filter) pushDeck(l.from, item.filter, item.title); });
+        if (filter) countRows(l.from, filter).then(function (n) {
+          cnt.textContent = n == null ? "?" : String(n);
+          if (n === 0) btn.disabled = true; else { item.ready = true; onFirstReady(); }
+        });
+        else cnt.textContent = "0";
+        items.push(item);
+      });
+      return items;
+    }
+
+    let currentLinks = [];
+    function firstOpenable() { return currentLinks.find(function (i) { return i.ready && !i.button.disabled; }); }
+    function markFirst() {
+      currentLinks.forEach(function (i) { i.button.classList.remove("first"); });
+      const f = firstOpenable();
+      if (f) f.button.classList.add("first");
+    }
+
+    function renderCard(d) {
+      if (d.error) { el.main.appendChild(h("div", { class: "err", text: "Could not load " + pretty(d.table) + ": " + d.error })); return; }
+      if (!d.rows.length) {
+        el.main.appendChild(h("div", { class: "empty", text: d.loading || !d.done ? "Loading…" : "No rows you can see here. Either it's empty, or access rules (RLS) keep these rows private." }));
+        return;
+      }
+      if (d.index >= d.rows.length) d.index = d.rows.length - 1;
+      const row = d.rows[d.index];
+      const totalTxt = d.total != null ? d.total : d.rows.length + (d.done ? "" : "+");
+      const pad = h("section", { id: "pad", "aria-label": "Record card" });
+      pad.appendChild(h("div", { class: "card-top" }, [
+        h("span", { text: pretty(d.table) + (T[d.table] && T[d.table].kind === "view" ? " (view)" : "") }),
+        h("span", { text: (d.index + 1) + " of " + totalTxt })
+      ]));
+      pad.appendChild(h("div", { class: "card-title", text: rowLabel(d.table, row) }));
+      pad.appendChild(fieldList(d.table, row));
+
+      const links = h("div", { class: "links" });
+      currentLinks = linkButtons(d.table, row, markFirst);
+      const outs = currentLinks.filter(function (i) { return i.kind === "out"; });
+      const ins = currentLinks.filter(function (i) { return i.kind === "in"; });
+      if (outs.length) { links.appendChild(h("h3", { text: "Belongs to (roll up)" })); outs.forEach(function (i) { links.appendChild(i.button); }); }
+      if (ins.length) { links.appendChild(h("h3", { text: "Linked here (drill down)" })); ins.forEach(function (i) { links.appendChild(i.button); }); }
+      if (!currentLinks.length) links.appendChild(h("p", { class: "nolinks", text: "This table has no linked tables." }));
+      pad.appendChild(links);
+
+      const atEnd = d.done && d.index >= d.rows.length - 1;
+      pad.appendChild(h("div", { class: "nav" }, [
+        h("button", { type: "button", disabled: d.index === 0, onclick: function () { step(-1); } }, [h("span", { class: "arr", text: "←" }), "Previous"]),
+        h("button", { type: "button", onclick: openFirst }, [h("span", { class: "arr", text: "↑" }), "Open link"]),
+        h("button", { type: "button", disabled: stack.length <= 1, onclick: function () { rollUp(); } }, [h("span", { class: "arr", text: "↓" }), "Back up"]),
+        h("button", { type: "button", disabled: atEnd, onclick: function () { step(1); } }, [h("span", { class: "arr", text: "→" }), "Next"])
+      ]));
+      el.main.appendChild(pad);
+      attachSwipe(pad);
+    }
+
+    function openFirst() {
+      const f = firstOpenable();
+      if (f) f.button.click();
+      else flash("NO LINKS");
+    }
+
+    /* Tree: rows of the current level, each expandable into its linked tables, recursively. */
+    function renderTree(d) {
+      if (d.error) { el.main.appendChild(h("div", { class: "err", text: "Could not load " + pretty(d.table) + ": " + d.error })); return; }
+      if (!d.rows.length) {
+        el.main.appendChild(h("div", { class: "empty", text: d.loading || !d.done ? "Loading…" : "No rows you can see here." }));
+        return;
+      }
+      const tree = h("div", { class: "tree" });
+      d.rows.forEach(function (row, i) { tree.appendChild(rowNode(d.table, row, 0, function () { d.index = i; setMode("cards"); })); });
+      el.main.appendChild(tree);
+      if (!d.done) el.main.appendChild(h("button", { class: "loadmore", type: "button", text: "Load more", onclick: loadMore }));
+    }
+
+    const MAX_DEPTH = 6;
+    function rowNode(table, row, depth, openCard) {
+      const node = h("div", { class: "node" });
+      const kids = h("div", { class: "kids", hidden: true });
+      const nlinks = (OUT[table] || []).length + (IN[table] || []).length;
+      const tw = h("span", { class: "twisty", text: nlinks && depth < MAX_DEPTH ? "▸" : "•" });
+      const line = h("button", { class: "nline", type: "button" }, [tw, h("span", { class: "lt", text: rowLabel(table, row) })]);
+      const canOpen = Boolean(openCard) || Boolean(pkFilter(table, row));
+      const open = !canOpen ? null : h("button", { class: "open-card", type: "button", text: "Card", onclick: function (e) {
+        e.stopPropagation();
+        if (openCard) openCard(); else { pushDeck(table, pkFilter(table, row), rowLabel(table, row)); setMode("cards"); }
+      } });
+      let loaded = false;
+      line.addEventListener("click", function () {
+        if (!nlinks || depth >= MAX_DEPTH) return;
+        kids.hidden = !kids.hidden;
+        tw.textContent = kids.hidden ? "▸" : "▾";
+        if (!loaded) { loaded = true; fillLinkGroups(table, row, depth, kids); }
+      });
+      node.appendChild(h("div", { style: "display:flex;align-items:center" }, [line, open]));
+      node.appendChild(kids);
+      return node;
+    }
+
+    function pkFilter(table, row) {
+      const pk = (T[table] && T[table].pk) || [];
+      if (!pk.length) return null;
+      const f = {};
+      pk.forEach(function (k) { f[k] = row[k]; });
+      return f;
+    }
+
+    function fillLinkGroups(table, row, depth, into) {
+      (OUT[table] || []).forEach(function (l) {
+        const filter = filterFor(l.to_cols, l.from_cols, row);
+        into.appendChild(groupNode("↑ " + pretty(l.to), l.to, filter, depth, true));
+      });
+      (IN[table] || []).forEach(function (l) {
+        const filter = filterFor(l.from_cols, l.to_cols, row);
+        into.appendChild(groupNode("↓ " + pretty(l.from) + " via " + pretty(l.from_cols.join(", ")), l.from, filter, depth, false));
+      });
+    }
+
+    function groupNode(label, table, filter, depth, single) {
+      const node = h("div", { class: "node" });
+      const kids = h("div", { class: "kids", hidden: true });
+      const cnt = h("span", { class: "count", text: filter ? "…" : "0" });
+      const tw = h("span", { class: "twisty", text: filter ? "▸" : "•" });
+      const line = h("button", { class: "nline", type: "button" }, [tw, h("span", { class: "lt" }, [label]), cnt]);
+      if (filter) countRows(table, filter).then(function (n) { cnt.textContent = n == null ? "?" : String(n); if (n === 0) tw.textContent = "•"; });
+      let loaded = false;
+      line.addEventListener("click", async function () {
+        if (!filter || tw.textContent === "•") return;
+        kids.hidden = !kids.hidden;
+        tw.textContent = kids.hidden ? "▸" : "▾";
+        if (loaded) return;
+        loaded = true;
+        try {
+          const got = await fetchRows(table, filter, 0, single ? 0 : PAGE - 1);
+          got.rows.forEach(function (r) { kids.appendChild(rowNode(table, r, depth + 1, null)); });
+          if (!got.rows.length) kids.appendChild(h("div", { class: "nolinks", text: "Nothing you can see." }));
+          if (got.total != null && got.total > got.rows.length) {
+            kids.appendChild(h("button", { class: "open-card", type: "button", text: "Open all " + got.total + " as cards", onclick: function () { setMode("cards"); pushDeck(table, filter, label.slice(2)); } }));
+          }
+        } catch (err) {
+          kids.appendChild(h("div", { class: "err", text: err.message || String(err) }));
+        }
+      });
+      node.appendChild(line);
+      node.appendChild(kids);
+      return node;
+    }
+
+    function setMode(m) {
+      mode = m;
+      el.cards.classList.toggle("on", m === "cards");
+      el.tree.classList.toggle("on", m === "tree");
+      render();
+    }
+
+    /* ---------- gestures ---------- */
+    function attachSwipe(pad) {
+      let sx = 0, sy = 0, active = false;
+      function start(x, y, target) {
+        if (target.closest && target.closest("button, a, input")) return;
+        sx = x; sy = y; active = true;
+      }
+      function end(x, y) {
+        if (!active) return;
+        active = false;
+        const dx = x - sx, dy = y - sy;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_MIN) return;
+        if (Math.abs(dx) >= Math.abs(dy)) step(dx > 0 ? 1 : -1);  // same as the Review pad: swipe right = next
+        else if (dy < 0) openFirst();
+        else rollUp();
+      }
+      pad.addEventListener("touchstart", function (e) { if (e.touches.length === 1) start(e.touches[0].clientX, e.touches[0].clientY, e.target); }, { passive: true });
+      pad.addEventListener("touchend", function (e) { const t = e.changedTouches[0]; end(t.clientX, t.clientY); }, { passive: true });
+      pad.addEventListener("mousedown", function (e) { if (e.button === 0) start(e.clientX, e.clientY, e.target); });
+      pad.addEventListener("mouseup", function (e) { end(e.clientX, e.clientY); });
+    }
+
+    window.addEventListener("keydown", function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+      const lvl = top();
+      if (!lvl || lvl.type !== "deck") return;
+      const map = { ArrowRight: function () { step(1); }, ArrowLeft: function () { step(-1); }, ArrowUp: openFirst, ArrowDown: function () { rollUp(); } };
+      if (map[e.key] && mode === "cards") { e.preventDefault(); map[e.key](); }
+      else if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); rollUp(); }
+    });
+
+    el.cards.addEventListener("click", function () { setMode("cards"); });
+    el.tree.addEventListener("click", function () { setMode("tree"); });
+
+    /* ---------- start ---------- */
+    async function start() {
+      stack.push({ type: "tables" });
+      try {
+        const res = await fetch(FUNCTION_BASE + "config.json", { cache: "no-store" });
+        const cfg = res.ok ? await res.json() : {};
+        if (!cfg.url || !cfg.anonKey || !window.supabase) throw new Error("This page isn't connected to a database.");
+        client = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: false } });
+        await loadSchema();
+      } catch (err) {
+        el.main.textContent = "";
+        el.main.appendChild(h("div", { class: "err", text: err.message || String(err) }));
+        return;
+      }
+      render();
+      await Promise.all((schema.tables || []).map(function (t) {
+        return countRows(t.name, null).then(function (n) { counts[t.name] = n == null ? -1 : n; });
+      }));
+      if (top().type === "tables") render();
+    }
+    start();
+  })();
+  </script>
+</body>
+</html>
