@@ -57,6 +57,11 @@
       text-transform: uppercase;
     }
     .brand p { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+    .dbpick { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+    .dbpick select {
+      background: var(--bg-elev); color: var(--text); border: 1px solid var(--line);
+      border-radius: 999px; padding: 5px 8px; font-size: 13px;
+    }
     .tabs { display: flex; gap: 6px; }
     .tabs a, .tabs button, .chip {
       font-size: 12px;
@@ -231,6 +236,9 @@
         <h1>Swipe</h1>
         <p>Any table, and the tables linked to it</p>
       </div>
+      <label class="dbpick">Database
+        <select id="db-pick" aria-label="Database"></select>
+      </label>
     </header>
 
     <div id="crumbs" aria-label="Where you are"></div>
@@ -247,9 +255,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <script>
-    /* The swipe-tables Supabase function for the database to browse.
-       Point this at the same function in another project to browse that one. */
-    const FUNCTION_BASE = "https://khyejqvutrjwxljuhmot.supabase.co/functions/v1/swipe-tables/";
+    /* Databases this page can browse: each is a project running the swipe-tables
+       function. The first is the default; add ?db=<key> to the address to pick another. */
+    const DATABASES = {
+      "dallavia": { label: "DallaVia", base: "https://lqxaiaiewdseplbuxddz.supabase.co/functions/v1/swipe-tables/" },
+      "swipe-app": { label: "Swipe app (old)", base: "https://khyejqvutrjwxljuhmot.supabase.co/functions/v1/swipe-tables/" }
+    };
   </script>
   <script>
   (function () {
@@ -270,6 +281,10 @@
     };
 
     let client = null;
+    const dbKeys = Object.keys(DATABASES);
+    const wanted = new URLSearchParams(location.search).get("db");
+    const dbKey = DATABASES[wanted] ? wanted : dbKeys[0];
+    const FUNCTION_BASE = DATABASES[dbKey].base;
 
     let schema = { tables: [], links: [] };
     const T = {};          // table name -> table info
@@ -463,7 +478,7 @@
     function renderTables() {
       const tables = schema.tables || [];
       if (!tables.length) {
-        el.main.appendChild(h("div", { class: "empty", text: "The public key can't read any table in this database yet. Nothing is hidden by mistake: access rules (RLS) decide what shows here." }));
+        el.main.appendChild(h("div", { class: "empty", text: "No table here is open to this page yet. This database's access rules (RLS) keep every table private, so it needs a sign-in for you before its tables can show." }));
         return;
       }
       const search = h("input", { id: "search", type: "search", placeholder: "Find a table", autocomplete: "off", "aria-label": "Find a table" });
@@ -719,6 +734,14 @@
       const map = { ArrowRight: function () { step(1); }, ArrowLeft: function () { step(-1); }, ArrowUp: openFirst, ArrowDown: function () { rollUp(); } };
       if (map[e.key] && mode === "cards") { e.preventDefault(); map[e.key](); }
       else if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); rollUp(); }
+    });
+
+    const pick = document.getElementById("db-pick");
+    dbKeys.forEach(function (k) { pick.appendChild(h("option", { value: k, text: DATABASES[k].label, selected: k === dbKey })); });
+    pick.addEventListener("change", function () {
+      const u = new URL(location.href);
+      u.searchParams.set("db", pick.value);
+      location.href = u.toString();
     });
 
     el.cards.addEventListener("click", function () { setMode("cards"); });
